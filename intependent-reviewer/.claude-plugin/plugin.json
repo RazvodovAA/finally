@@ -1,0 +1,5 @@
+{
+    "name": "independent-reviewer",
+    "description": "This plugin provides an agent that can carry out an independent review of changes since the last commit. It uses a separate AI agent, codex, to perform the review.",
+    "version": "1.0.0"
+}

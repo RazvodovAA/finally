@@ -66,7 +66,7 @@ The user runs a single Docker command (or a provided start script). A browser op
 - **Backend**: FastAPI (Python), managed as a `uv` project
 - **Database**: SQLite, single file at `db/finally.db`, volume-mounted for persistence
 - **Real-time data**: Server-Sent Events (SSE) — simpler than WebSockets, one-way server→client push, works everywhere
-- **AI integration**: LiteLLM → OpenRouter (Cerebras for fast inference), with structured outputs for trade execution
+- **AI integration**: LiteLLM → OpenAI, with structured outputs for trade execution
 - **Market data**: Environment-variable driven — simulator by default, real data via Massive API if key provided
 
 ### Why These Choices
@@ -121,8 +121,8 @@ finally/
 ## 5. Environment Variables
 
 ```bash
-# Required: OpenRouter API key for LLM chat functionality
-OPENROUTER_API_KEY=your-openrouter-api-key-here
+# Required: OpenAI API key for LLM chat functionality
+OPENAI_API_KEY=your-openai-api-key-here
 
 # Optional: Massive (Polygon.io) API key for real market data
 # If not set, the built-in market simulator is used (recommended for most users)
@@ -281,9 +281,9 @@ All tables include a `user_id` column defaulting to `"default"`. This is hardcod
 
 ## 9. LLM Integration
 
-When writing code to make calls to LLMs, use cerebras-inference skill to use LiteLLM via OpenRouter to the `openrouter/openai/gpt-oss-120b` model with Cerebras as the inference provider. Structured Outputs should be used to interpret the results.
+When writing code to make calls to LLMs, use LiteLLM via OpenAI to the `/openai/gpt-4` model. Structured Outputs should be used to interpret the results.
 
-There is an OPENROUTER_API_KEY in the .env file in the project root.
+There is an OPENAI_API_KEY in the .env file in the project root.
 
 ### How It Works
 
@@ -292,11 +292,11 @@ When the user sends a chat message, the backend:
 1. Loads the user's current portfolio context (cash, positions with P&L, watchlist with live prices, total portfolio value)
 2. Loads recent conversation history from the `chat_messages` table
 3. Constructs a prompt with a system message, portfolio context, conversation history, and the user's new message
-4. Calls the LLM via LiteLLM → OpenRouter, requesting structured output, using the cerebras-inference skill
+4. Calls the LLM via LiteLLM → OpenAI, requesting structured output
 5. Parses the complete structured JSON response
 6. Auto-executes any trades or watchlist changes specified in the response
 7. Stores the message and executed actions in `chat_messages`
-8. Returns the complete JSON response to the frontend (no token-by-token streaming — Cerebras inference is fast enough that a loading indicator is sufficient)
+8. Returns the complete JSON response to the frontend
 
 ### Structured Output Schema
 
@@ -339,7 +339,7 @@ The LLM should be prompted as "FinAlly, an AI trading assistant" with instructio
 
 ### LLM Mock Mode
 
-When `LLM_MOCK=true`, the backend returns deterministic mock responses instead of calling OpenRouter. This enables:
+When `LLM_MOCK=true`, the backend returns deterministic mock responses instead of calling OpenAI. This enables:
 - Fast, free, reproducible E2E tests
 - Development without an API key
 - CI/CD pipelines
@@ -454,3 +454,46 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 - Portfolio visualization: heatmap renders with correct colors, P&L chart has data points
 - AI chat (mocked): send a message, receive a response, trade execution appears inline
 - SSE resilience: disconnect and verify reconnection
+
+---
+
+## 13. Review Notes
+
+### Clarifications Needed
+
+**Section 9 — LLM model string**: The plan says `use LiteLLM via OpenAI to the /openai/gpt-4 model`. In LiteLLM the format is `openai/gpt-4` (no leading slash). Also, `gpt-4` is outdated (April 2026) — should this be `openai/gpt-4o` or `openai/gpt-4-turbo`? Needs a concrete model ID so all agents use the same one.
+
+**Section 8 — `GET /api/portfolio` uses current prices**: The portfolio endpoint must return unrealized P&L, which requires live prices. The spec doesn't say where these come from — presumably the in-memory price cache. This dependency should be stated explicitly so the backend agent doesn't build a separate price lookup.
+
+**Section 6 — SSE stream scope**: The spec says the stream pushes updates for "all tickers known to the system." Does this include only watchlist tickers, or also tickers in positions that were removed from the watchlist? Recommend: stream = watchlist union positions, or just always stream all tickers the simulator tracks.
+
+**Section 2 — "daily change %"**: The watchlist shows "daily change %," but the simulator has no concept of a market open price. Does "daily" mean change since the app started, change since the first price the simulator generated, or something else? Needs definition so the frontend and backend agree.
+
+**Section 9 — LLM mock response format**: `LLM_MOCK=true` is mentioned but the mock response content is never defined. E2E tests need to assert on specific returned text, trade counts, etc. The mock should be specified (or at minimum, documented) so tests are deterministic and meaningful.
+
+**Section 10 — Recharts vs canvas**: The spec says "Canvas-based charting library preferred (Lightweight Charts or Recharts)." Recharts is SVG-based, not canvas. If canvas performance matters, Lightweight Charts (TradingView) is the right choice. Recommend removing Recharts from this recommendation to avoid confusion.
+
+**Section 8 — Error response shapes**: The trade endpoint should define HTTP status codes for failure cases (e.g., 400 for insufficient cash, 404 for unknown ticker, 422 for bad input). Without this, the frontend agent will guess.
+
+**Section 9 — Chat response shape returned to frontend**: The spec defines what gets stored in `chat_messages.actions`, but doesn't spell out the exact JSON the `/api/chat` endpoint returns. The frontend needs to know whether it receives `{message, trades, watchlist_changes}` directly or a wrapper with status.
+
+### Questions
+
+1. **Watchlist → SSE coupling**: When a user adds a new ticker to the watchlist, how does the simulator learn to start generating prices for it? Does the simulator always run all tickers, or does it dynamically add tickers based on watchlist state? The architecture diagram doesn't address this.
+ANSWER: based on whatchlist.
+
+2. **Position tickers not on watchlist**: If the AI buys a ticker that isn't on the watchlist, does it appear in the SSE stream? Does it get auto-added to the watchlist?
+ANSWER: yes, and yes
+
+3. **Frontend dev workflow**: The frontend is a Next.js static export ultimately served by FastAPI, but during development it runs on port 3000 with the Next.js dev server. The backend runs on port 8000. This means `/api/*` calls from the dev server will hit a different origin. Is there a Next.js `rewrites` config or `next.config.js` proxy to handle this? This needs to be in scope for the frontend agent.
+ANSWER: add to the scope of the frontend agent
+
+4. **Portfolio snapshot on fresh start**: The P&L chart reads from `portfolio_snapshots`, but on a fresh start there are no snapshots yet. What does the chart render — nothing, a single $10k data point, or does the backend always write an initial snapshot on seed?
+ANSWER: whatever in intersection of simple implementation and user appealing
+
+5. **Treemap with no positions**: What is the empty state for the portfolio heatmap when the user has no positions? The spec doesn't say.
+ANSWE: empty heat map
+
+### Simplification Opportunities
+
+**`chat_messages.actions` JSON column**: This stores the executed trades/watchlist changes redundantly — the same data is already in the `trades` and `watchlist` tables. It might exist for display purposes (showing what the AI did inline in chat), but if so the frontend could re-derive it from the API response. Worth confirming this column is actually needed before building it.I
