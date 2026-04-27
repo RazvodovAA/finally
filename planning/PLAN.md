@@ -8,6 +8,23 @@ FinAlly (Finance Ally) is a visually stunning AI-powered trading workstation tha
 
 This is the capstone project for an agentic AI coding course. It is built entirely by Coding Agents demonstrating how orchestrated AI agents can produce a production-quality full-stack application. Agents interact through files in `planning/`.
 
+## Project Status — Last Updated 2026-04-27
+
+**COMPLETE (100%):**
+- [x] Market Data System (Simulator, Massive API, PriceCache, SSE streaming, tests)
+- [x] Database (SQLite schema, seed data, lazy initialization, tests)
+- [x] Backend API (FastAPI app, portfolio endpoints, watchlist endpoints, trade logic, health check)
+- [x] Docker (Multi-stage build, frontend + backend, volume mount for DB, healthcheck)
+
+**IN PROGRESS (0%):**
+- [ ] Frontend (Next.js stub only; needs full UI implementation)
+- [ ] Chat/LLM Integration (Not started)
+
+**NEXT PHASE:**
+Build the Frontend UI and Chat endpoint. The foundational systems are solid and tested. Frontend blocks on no dependencies; Chat can proceed in parallel.
+
+---
+
 ## 2. User Experience
 
 ### First Launch
