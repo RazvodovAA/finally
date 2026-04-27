@@ -205,3 +205,29 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.*.local
+
+# Database
+db/
+*.db
+*.db-journal
+
+# Docker
+.dockerignore
+finally-data/
+
+# macOS
+.DS_Store
+
+# Playwright browser automation artifacts
+.playwright-mcp/
+
+# Debug screenshots
+screenshot*.png
+fixed-screenshot*.png

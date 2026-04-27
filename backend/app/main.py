@@ -84,7 +84,7 @@ def create_app(db_path: str = "/app/db/finally.db") -> FastAPI:
         logger.info("Database connection closed")
 
     # Serve static frontend files (mount at end so API routes take precedence)
-    frontend_export_path = Path(__file__).parent.parent.parent / "frontend" / ".next" / "export"
+    frontend_export_path = Path("/app/frontend/out")
     if frontend_export_path.exists():
         logger.info("Mounting static frontend files from %s", frontend_export_path)
         app.mount(

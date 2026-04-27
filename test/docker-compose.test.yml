@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Backend API + frontend serving
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: finally-test-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - finally-test-data:/app/db
+    env_file:
+      - ../.env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      LLM_MOCK: "true"  # Use mock LLM for deterministic tests
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+    depends_on:
+      - playwright
+
+  # Playwright test runner
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.50.0-noble
+    container_name: finally-test-playwright
+    working_dir: /tests
+    volumes:
+      - .:/tests
+    environment:
+      CI: "true"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: bash -c "npm install && npx playwright test"
+
+volumes:
+  finally-test-data:
+    driver: local
